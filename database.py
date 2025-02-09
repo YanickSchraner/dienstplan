@@ -148,52 +148,77 @@ def get_employee_absences():
     cursor = conn.cursor()
     cursor.execute("SELECT id, SL, Fe, UW, w FROM employees")
     absences = {}
-    for row in cursor.fetchall():
-        employee_id = row['id']
-        absence_list = []
-
-        # Helper function to process comma-separated dates
-        def process_dates(date_string):
-            if date_string:
-                return [d.strip() for d in date_string.split(',') if d.strip()]
+    
+    def process_date_entries(date_string, absence_type):
+        if not date_string:
             return []
-
-        # Process SL (Schule)
-        for date in process_dates(row['SL']):
-            absence_list.append((date, "SL"))
-
-        # Process UW (Unbezahlte Weiterbildung)
-        for date in process_dates(row['UW']):
-            absence_list.append((date, "uw"))
         
-        #Process Wunschfrei
-        for date in process_dates(row['w']):
-            absence_list.append((date, "w"))
+        result = []
+        entries = [e.strip() for e in date_string.split(',') if e.strip()]
+        
+        for entry in entries:
+            try:
+                if '-' in entry or '–' in entry:  # Handle both hyphen types
+                    parts = entry.split('-') if '-' in entry else entry.split('–')
+                    start_date_str, end_date_str = [p.strip() for p in parts]
+                    
+                    start_day = int(start_date_str.split('.')[0])
+                    start_month = int(start_date_str.split('.')[1])
+                    end_day = int(end_date_str.split('.')[0])
+                    end_month = int(end_date_str.split('.')[1])
+                    
+                    if start_month == end_month:
+                        for day in range(start_day, end_day + 1):
+                            result.append((f"{day:02d}.{start_month:02d}.", absence_type))
+                    else:
+                        for day in range(start_day, 32):
+                            result.append((f"{day:02d}.{start_month:02d}.", absence_type))
+                        for day in range(1, end_day + 1):
+                            result.append((f"{day:02d}.{end_month:02d}.", absence_type))
+                else:
+                    day = int(entry.split('.')[0])
+                    month = int(entry.split('.')[1])
+                    result.append((f"{day:02d}.{month:02d}.", absence_type))
+            except (ValueError, IndexError) as e:
+                print(f"Warning: Invalid date format in {entry}: {e}")
+                continue
+        
+        return result
 
-        # Process Fe (Ferien) - Handle date ranges
+    for row in cursor.fetchall():
+        employee_id = row['id']  # Keep as integer
+        absence_list = []
+        
+        # All these are treated as absences - days where employee cannot be scheduled
+        if row['SL']:
+            absence_list.extend(process_date_entries(row['SL'], "SL"))
         if row['Fe']:
-            ferien_ranges = [r.strip() for r in row['Fe'].split(',') if r.strip()]
-            for ferien_range in ferien_ranges:
-                try:
-                    if '-' in ferien_range:  # It's a range
-                        start_date_str, end_date_str = ferien_range.split('-')
-                        start_day, start_month = map(int, start_date_str.split('.'))
-                        end_day, end_month = map(int, end_date_str.split('.'))
+            absence_list.extend(process_date_entries(row['Fe'], "Fe"))
+        if row['UW']:
+            absence_list.extend(process_date_entries(row['UW'], "uw"))
+        if row['w']:
+            absence_list.extend(process_date_entries(row['w'], "w"))  # Just 'w', not '.w'
+        
+        if absence_list:  # Only add if there are absences
+            absences[employee_id] = absence_list
 
-                        if start_month == end_month:
-                            for day in range(start_day, end_day + 1):
-                                absence_list.append((f"{day}.{start_month}.", "Fe"))
-                        else:
-                            # For simplicity, assume it only spans one month
-                            for day in range(start_day, 32):
-                                absence_list.append((f"{day}.{start_month}.", "Fe"))
-                            for day in range(1, end_day + 1):
-                                absence_list.append((f"{day}.{end_month}.", "Fe"))
-                    else:  # Single date
-                        absence_list.append((ferien_range, "Fe"))
-                except ValueError:
-                    pass #ignore errors
-
-        absences[employee_id] = absence_list
     conn.close()
     return absences
+
+def get_employee_pensum(employee_id):
+    """Get the pensum for an employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT pensum FROM employees WHERE id = ?", (employee_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return f"{result[0]}%" if result else "100%"
+
+def get_employee_qualification(employee_id):
+    """Get the qualification for an employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT qualifikation FROM employees WHERE id = ?", (employee_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result['qualifikation'] if result else 'Unknown'

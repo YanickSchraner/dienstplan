@@ -15,7 +15,16 @@ def solution_to_dataframe(solution, employees, year, month):
     for (employee_id, day_str), shift_id in solution.items():
         date_str = f"{year}-{month:02d}-{int(day_str):02d}"
         employee_name = database.get_employee_name(employee_id)
-        data.append({"date": date_str, "employee_id": employee_id, "employee_name": employee_name, "shift_id": shift_id})
+        employee_qual = database.get_employee_qualification(employee_id)
+        employee_pensum = database.get_employee_pensum(employee_id)
+        data.append({
+            "date": date_str,
+            "employee_id": employee_id,
+            "employee_name": employee_name,
+            "qualification": employee_qual,
+            "pensum": employee_pensum,
+            "shift_id": shift_id
+        })
     return pd.DataFrame(data)
 
 def main():
@@ -60,7 +69,7 @@ def main():
     year = selected_date.year
     month = selected_date.month
     # --- Get Holidays for Basel-Stadt ---
-    ch_holidays = holidays.CH(years=year, prov="BS")
+    ch_holidays = holidays.Switzerland(years=year, prov="BS")
 
     # --- Main Area: Schedule Creation ---
     st.header(f"3. Create Schedule ({calendar.month_name[month]} {year})")
@@ -68,27 +77,49 @@ def main():
     dates = [f"{year}-{month:02d}-{day:02d}" for day in range(1, num_days + 1)]
     employees = database.get_all_employees()
     shifts = database.get_all_shifts()
+    logging.info(f"Shifts type: {type(shifts)}")
+    logging.info(f"First shift type: {type(shifts[0]) if shifts else 'No shifts'}")
+    logging.info(f"Shifts: {shifts}")
 
     # --- Automatic Schedule Generation and Solution Selection ---
     if st.button("Generate Schedule"):
         try:
             absences = database.get_employee_absences()
+            
             employee_qualifications = database.get_employee_qualifications()
+            
             employee_workload = database.get_employee_workload()
-            # Get ALL solutions
-            solutions = scheduler.generate_schedule(
-                employees, shifts, absences, employee_qualifications, employee_workload, year, month, ch_holidays
+            
+            solution = scheduler.generate_schedule_highs(
+                employees,
+                shifts,
+                absences,
+                employee_qualifications,
+                employee_workload,
+                year,
+                month,
+                ch_holidays
             )
+            
+            if solution:
+                # Convert HiGHS solution to schedule format
+                schedule = {}
+                col_value = solution.col_value
+                
+                for var_index, var_name in enumerate(scheduler.variable_names):
+                    if len(var_name) == 3 and col_value[var_index] > 0.9:
+                        employee_id, day, shift_code = var_name
+                        day_str = f"{year}-{month:02d}-{int(day):02d}"
+                        schedule[(employee_id, day)] = shift_code
 
-            if solutions:
-                st.session_state.solutions = solutions  # Store solutions in session state
-                st.session_state.selected_solution_index = 0  # Initialize selection
-                st.success(f"Found {len(solutions)} solutions!")
+                st.session_state.solutions = [schedule]  # Store as list for compatibility
+                st.session_state.selected_solution_index = 0
+                st.success("Solution found!")
             else:
-                st.error("No solution found.  Check constraints and employee availability.")
+                st.error("No feasible solution found. Check staffing levels and constraints.")
         except Exception as e:
-            st.error(f"Error generating schedule: {e}")
-            logging.exception("Error generating schedule")
+            st.error(f"Error generating schedule: {str(e)}")
+            logging.exception("Detailed error in schedule generation:")
 
     # --- Solution Selection (Dropdown) ---
     if "solutions" in st.session_state and st.session_state.solutions:
@@ -105,35 +136,71 @@ def main():
         selected_solution = st.session_state.solutions[st.session_state.selected_solution_index]
         solution_df = solution_to_dataframe(selected_solution, employees, year, month)
 
+        print(solution_df)
+
         # Create pivot table for display
         pivot_schedule = pd.pivot_table(
             solution_df,
-            index="employee_name",
+            index=["qualification", "employee_name", "pensum"],
             columns="date",
             values="shift_id",
             aggfunc="first",
         )
+        
+        # Sort by qualification in custom order
+        qual_order = {"Leitung": 0, "HF": 1, "PH": 2, "Ausbildung": 3}
+        pivot_schedule = pivot_schedule.reset_index()
+        pivot_schedule['qual_order'] = pivot_schedule['qualification'].map(qual_order)
+        pivot_schedule = pivot_schedule.sort_values('qual_order').drop('qual_order', axis=1)
+        pivot_schedule = pivot_schedule.set_index(['qualification', 'employee_name', 'pensum'])
+        
+        # Calculate daily totals
+        early_shifts = ["B Dienst", "C Dienst"]
+        late_shifts = ["VS Dienst", "S Dienst"]
+        split_shifts = ["BS Dienst", "C4 Dienst"]
+        
+        daily_totals = pd.DataFrame(index=['Früh/Spät/Geteilt'])
+        for col in pivot_schedule.columns:
+            shifts = pivot_schedule[col].dropna()
+            early_count = sum(1 for s in shifts if s in early_shifts)
+            late_count = sum(1 for s in shifts if s in late_shifts)
+            split_count = sum(1 for s in shifts if s in split_shifts)
+            early_count += split_count  # Add split shifts to both early and late
+            late_count += split_count
+            daily_totals[col] = f"{early_count}/{late_count}/{split_count}"
+        
+        # Display the schedule with totals
         st.dataframe(pivot_schedule)
-    
-        # --- Save Selected Solution to Database ---
-        #Clear schedule
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM schedule")
-        conn.commit()
-        conn.close()
-        #Save selected Solution
-        for index, row in solution_df.iterrows():
-            if row["shift_id"] is not None: #Only add if a shift is assigned
-                try:
-                    database.add_shift_assignment(row["date"], row["employee_id"], row["shift_id"])
-                except Exception as e:
-                    logging.error(f"Failed to add shift assignment: {e}")
-
-        # --- Export Selected Solution to Excel ---
+        st.dataframe(daily_totals)
+        
+        # Export to Excel with formatting
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='xlsxwriter', mode='wb') as writer:
             pivot_schedule.to_excel(writer, sheet_name='Schedule')
+            daily_totals.to_excel(writer, sheet_name='Schedule', startrow=len(pivot_schedule)+2)
+            
+            # Get the xlsxwriter workbook and worksheet objects
+            workbook = writer.book
+            worksheet = writer.sheets['Schedule']
+            
+            # Add formats
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'top',
+                'border': 1
+            })
+            
+            # Write headers with formatting
+            for col_num, value in enumerate(pivot_schedule.columns.values):
+                worksheet.write(0, col_num + 3, value, header_format)
+            
+            # Adjust column widths
+            worksheet.set_column('A:A', 12)  # Qualification
+            worksheet.set_column('B:B', 20)  # Name
+            worksheet.set_column('C:C', 8)   # Pensum
+            worksheet.set_column('D:AE', 6)  # Dates
+            
         excel_data = output.getvalue()
         st.download_button(
             label="Export Selected Solution to Excel",
@@ -149,8 +216,8 @@ def main():
             "Select Employee", [f"{emp['id']} - {emp['name']}" for emp in employees]
         )
         selected_shift_id = st.selectbox(
-            "Select Shift", [shift["code"] for shift in shifts]
-        )  # Display only shift codes.
+            "Select Shift", [shift["code"] for shift in shifts if isinstance(shift, dict)]
+        )
 
         submit_button = st.form_submit_button(label="Add to Schedule")
         if submit_button:

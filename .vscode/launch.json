@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug Tests",
+            "type": "python",
+            "request": "launch",
+            "program": "-m",
+            "args": [
+                "unittest",
+                "discover",
+                "-s",
+                ".",
+                "-p",
+                "*test*.py"
+
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+} 

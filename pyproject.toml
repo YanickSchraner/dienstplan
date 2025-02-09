@@ -1,0 +1,14 @@
+[project]
+name = "dienstplan"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "highspy>=1.9.0",
+    "holidays>=0.66",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "python-constraint2>=2.0.0",
+    "streamlit>=1.42.0",
+]

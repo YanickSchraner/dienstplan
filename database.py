@@ -222,3 +222,12 @@ def get_employee_qualification(employee_id):
     result = cursor.fetchone()
     conn.close()
     return result['qualifikation'] if result else 'Unknown'
+
+def get_employee_diensttage(employee_id):
+    """Get the diensttage (target workdays) for an employee."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT diensttage FROM employees WHERE id = ?", (employee_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result['diensttage'] if result else 0

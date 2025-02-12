@@ -177,11 +177,43 @@ def main():
             aggfunc="first",
         ).fillna('x')  # Fill empty cells with 'x'
         
+        # Reset index to manipulate columns
+        pivot_schedule = pivot_schedule.reset_index()
+        
+        # Add total workdays column
+        pivot_schedule['Soll'] = pivot_schedule['employee_name'].apply(
+            lambda x: database.get_employee_diensttage(
+                next(emp['id'] for emp in employees if emp['name'] == x)
+            )
+        )
+        
+        # Calculate actual workdays (shifts + Fe + SL)
+        def count_workdays(row):
+            # Get all date columns (they start with the year)
+            date_cols = [col for col in row.index if isinstance(col, str) and col.startswith(str(year))]
+            count = 0
+            for col in date_cols:
+                value = row[col]
+                if isinstance(value, str) and value not in ['x', 'w', 'uw']:  # Count everything except 'x', 'w', and 'uw'
+                    count += 1
+            return count
+            
+        pivot_schedule['Ist'] = pivot_schedule.apply(count_workdays, axis=1)
+        
         # Sort by qualification in custom order
         qual_order = {"Leitung": 0, "HF": 1, "PH": 2, "Ausbildung": 3}
-        pivot_schedule = pivot_schedule.reset_index()
         pivot_schedule['qual_order'] = pivot_schedule['qualification'].map(qual_order)
-        pivot_schedule = pivot_schedule.sort_values('qual_order').drop('qual_order', axis=1)
+        pivot_schedule = pivot_schedule.sort_values('qual_order')
+        
+        # Drop qual_order first
+        pivot_schedule = pivot_schedule.drop('qual_order', axis=1)
+        
+        # Then reorder columns
+        cols = ['qualification', 'employee_name', 'pensum', 'Soll', 'Ist']
+        date_cols = [col for col in pivot_schedule.columns if isinstance(col, str) and col.startswith(str(year))]
+        pivot_schedule = pivot_schedule[cols + date_cols]
+        
+        # Set final index
         pivot_schedule = pivot_schedule.set_index(['qualification', 'employee_name', 'pensum'])
         
         # Calculate daily totals

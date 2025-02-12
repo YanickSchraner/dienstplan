@@ -136,16 +136,46 @@ def main():
         selected_solution = st.session_state.solutions[st.session_state.selected_solution_index]
         solution_df = solution_to_dataframe(selected_solution, employees, year, month)
 
-        print(solution_df)
+        # Get absences for the selected month
+        absences = database.get_employee_absences()
+        absence_data = []
+        for emp_id, dates in absences.items():
+            employee_name = database.get_employee_name(emp_id)
+            employee_qual = database.get_employee_qualification(emp_id)
+            employee_pensum = database.get_employee_pensum(emp_id)
+            for absence in dates:
+                day_month = absence[0]  # Format: "DD.MM."
+                absence_type = absence[1]
+                
+                # Convert date format
+                day = int(day_month.split('.')[0])
+                # Only process if it's for the selected month
+                if f"{month:02d}." in day_month:
+                    date_str = f"{year}-{month:02d}-{day:02d}"
+                    absence_data.append({
+                        "date": date_str,
+                        "employee_id": emp_id,
+                        "employee_name": employee_name,
+                        "qualification": employee_qual,
+                        "pensum": employee_pensum,
+                        "shift_id": absence_type
+                    })
+        
+        # Combine solution and absence DataFrames
+        absence_df = pd.DataFrame(absence_data) if absence_data else pd.DataFrame()
+        if not absence_df.empty:
+            combined_df = pd.concat([solution_df, absence_df])
+        else:
+            combined_df = solution_df
 
         # Create pivot table for display
         pivot_schedule = pd.pivot_table(
-            solution_df,
+            combined_df,
             index=["qualification", "employee_name", "pensum"],
             columns="date",
             values="shift_id",
             aggfunc="first",
-        )
+        ).fillna('x')  # Fill empty cells with 'x'
         
         # Sort by qualification in custom order
         qual_order = {"Leitung": 0, "HF": 1, "PH": 2, "Ausbildung": 3}
@@ -159,14 +189,14 @@ def main():
         late_shifts = ["VS Dienst", "S Dienst"]
         split_shifts = ["BS Dienst", "C4 Dienst"]
         
-        daily_totals = pd.DataFrame(index=['Früh/Spät/Geteilt'])
+        daily_totals = pd.DataFrame(index=pd.Index(['Early/Late/Split'], name='Totals'))
         for col in pivot_schedule.columns:
             shifts = pivot_schedule[col].dropna()
+            # Count regular shifts
             early_count = sum(1 for s in shifts if s in early_shifts)
             late_count = sum(1 for s in shifts if s in late_shifts)
             split_count = sum(1 for s in shifts if s in split_shifts)
-            early_count += split_count  # Add split shifts to both early and late
-            late_count += split_count
+            
             daily_totals[col] = f"{early_count}/{late_count}/{split_count}"
         
         # Display the schedule with totals

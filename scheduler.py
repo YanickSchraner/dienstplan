@@ -254,18 +254,18 @@ def generate_schedule_highs(
 
         # 2. B Dienst specific requirements
         b_dienst_vars = []
-        b_dienst_fach_vars = []
+        b_dienst_hf_vars = []
         for employee in employees:
             var_name = (employee["id"], day, "B Dienst")
             if var_name in variable_names:
                 var_index = variable_names.index(var_name)
                 b_dienst_vars.append(var_index)
-                if employee_qualifications.get(employee["id"]) in ("HF", "Leitung"):
-                    b_dienst_fach_vars.append(var_index)
+                if employee_qualifications.get(employee["id"]) == "HF":
+                    b_dienst_hf_vars.append(var_index)
 
-        # Constraint: Exactly 1 Fachperson in B Dienst
-        if b_dienst_fach_vars:
-            for var_index in b_dienst_fach_vars:
+        # Constraint: Exactly 1 HF in B Dienst
+        if b_dienst_hf_vars:
+            for var_index in b_dienst_hf_vars:
                 a_matrix_index.append(var_index)
                 a_matrix_value.append(1.0)
             a_matrix_start.append(len(a_matrix_index))
@@ -282,29 +282,29 @@ def generate_schedule_highs(
             row_upper.append(float('inf'))
 
         # --- Late Shift Requirements ---
-        # 1. Total late shift staffing
-        late_fach_vars = []
-        late_nicht_fach_vars = []
+        # New: Constraint: Exactly 1 HF in S Dienst for each day
+        s_dienst_hf_vars = []
         for employee in employees:
-            for shift in late_shifts + split_shifts:
-                var_name = (employee["id"], day, shift)
+            if employee_qualifications.get(employee["id"]) == "HF":
+                var_name = (employee["id"], day, "S Dienst")
                 if var_name in variable_names:
-                    var_index = variable_names.index(var_name)
-                    if employee_qualifications.get(employee["id"]) in ("HF", "Leitung"):
-                        late_fach_vars.append(var_index)
-                    else:
-                        late_nicht_fach_vars.append(var_index)
-
-        # Constraint: Exactly 1 Fachperson in late shifts
-        if late_fach_vars:
-            for var_index in late_fach_vars:
+                    s_dienst_hf_vars.append(variable_names.index(var_name))
+        if s_dienst_hf_vars:
+            for var_index in s_dienst_hf_vars:
                 a_matrix_index.append(var_index)
                 a_matrix_value.append(1.0)
             a_matrix_start.append(len(a_matrix_index))
             row_lower.append(1.0)
             row_upper.append(1.0)
 
-        # Constraint: 2-3 nicht Fachpersonen in late shifts
+        # Constraint: 2-3 Nicht Fachpersonen in late shifts (employees not HF)
+        late_nicht_fach_vars = []
+        for employee in employees:
+            if employee_qualifications.get(employee["id"]) != "HF":
+                for shift in late_shifts + split_shifts:
+                    var_name = (employee["id"], day, shift)
+                    if var_name in variable_names:
+                        late_nicht_fach_vars.append(variable_names.index(var_name))
         if late_nicht_fach_vars:
             for var_index in late_nicht_fach_vars:
                 a_matrix_index.append(var_index)
@@ -336,9 +336,9 @@ def generate_schedule_highs(
     logging.info("Shift Requirements Added.")
 
     # 3. Lehrling Constraint (Max 1 Sunday/Holiday per month)
-    logging.info("Adding Lehrling Constraint...")
+    logging.info("Adding Lehrling Constraint for Ausbildung 2...")
     for employee in employees:
-        if employee["qualifikation"] == "Ausbildung":
+        if employee["qualifikation"] == "Ausbildung 2":
             sunday_holiday_vars = []
             for day_val in range(1, num_days + 1):
                 day_str = str(day_val)
@@ -347,18 +347,55 @@ def generate_schedule_highs(
                     # Find the corresponding variable index
                     for shift in shifts:
                         var_name = (employee["id"], day_str, shift["code"])
-                        if var_name in variable_names: # Variable may not exist due to absences
+                        if var_name in variable_names:  # Variable may not exist due to absences
                             sunday_holiday_vars.append(variable_names.index(var_name))
-
             if sunday_holiday_vars:
                 for var_index in sunday_holiday_vars:
                     a_matrix_index.append(var_index)
                     a_matrix_value.append(1.0)
-                
                 a_matrix_start.append(len(a_matrix_index))
-                row_lower.append(0.0)  # Changed from 1.0 to allow no shift
-                row_upper.append(1.0)  # Maximum one shift
+                row_lower.append(0.0)
+                row_upper.append(1.0)
     logging.info("Lehrling Constraint Added.")
+
+    # Additional constraints for Ausbildung 1:
+    #   - They are not allowed to work on weekends (Saturday and Sunday)
+    #   - On weekdays they are allowed only a B Dienst or C Dienst.
+    logging.info("Adding constraints for Ausbildung 1: weekdays allowed only B or C Dienst and no weekend work")
+    for employee in employees:
+        if employee["qualifikation"] == "Ausbildung 1":
+            for day_val in range(1, num_days + 1):
+                day_str = str(day_val)
+                date_obj = date(year, month, day_val)
+                if date_obj.weekday() >= 5:  # Weekend: block all shifts on Saturday and Sunday
+                    block_vars = []
+                    for shift in shifts:
+                        if shift["code"] in assignable_shift_codes:
+                            var_name = (employee["id"], day_str, shift["code"])
+                            if var_name in variable_names:
+                                block_vars.append(variable_names.index(var_name))
+                    if block_vars:
+                        for var_index in block_vars:
+                            a_matrix_index.append(var_index)
+                            a_matrix_value.append(1.0)
+                        a_matrix_start.append(len(a_matrix_index))
+                        row_lower.append(0.0)
+                        row_upper.append(0.0)
+                else:  # Weekday: allow only B Dienst or C Dienst
+                    block_vars = []
+                    for shift in shifts:
+                        if shift["code"] not in ["B Dienst", "C Dienst"]:
+                            var_name = (employee["id"], day_str, shift["code"])
+                            if var_name in variable_names:
+                                block_vars.append(variable_names.index(var_name))
+                    if block_vars:
+                        for var_index in block_vars:
+                            a_matrix_index.append(var_index)
+                            a_matrix_value.append(1.0)
+                        a_matrix_start.append(len(a_matrix_index))
+                        row_lower.append(0.0)
+                        row_upper.append(0.0)
+    logging.info("Ausbildung 1 constraints added.")
 
     # 4. Spät-Frühdienst Transition
     logging.info("Adding Spaet-Fruehdienst Constraint...")
@@ -396,6 +433,7 @@ def generate_schedule_highs(
     logging.info("Adding Bü Dienst Constraints...")
     for employee in employees:
         if employee_qualifications.get(employee["id"]) == "Leitung":
+            # --- Enforce aggregate Bü Dienst assignments ---
             # Count Bü Dienst shifts for this Leitung employee
             bu_dienst_vars = []
             for day in days:
@@ -404,25 +442,21 @@ def generate_schedule_highs(
                     var_index = variable_names.index(var_name)
                     bu_dienst_vars.append(var_index)
             
-            # Add constraint: maximum 4 Bü Dienst per month
+            # Enforce exactly 4 Bü Dienst per month for Leitung
             if bu_dienst_vars:
                 for var_index in bu_dienst_vars:
                     a_matrix_index.append(var_index)
                     a_matrix_value.append(1.0)
                 a_matrix_start.append(len(a_matrix_index))
-                row_lower.append(0.0)
+                row_lower.append(4.0)
                 row_upper.append(4.0)
 
-            # Add constraints: No weekend shifts and no late shifts for Leitung
+            # --- For each day, enforce that Leitung works only on weekdays with either a B Dienst or Bü Dienst ---
             for day_val in range(1, num_days + 1):
                 day = str(day_val)
                 date_obj = date(year, month, day_val)
-                
-                # Check if it's a weekend
-                is_weekend = date_obj.weekday() >= 5
-                
-                if is_weekend:
-                    # Block all shifts on weekends
+                if date_obj.weekday() >= 5:
+                    # Block all shifts on weekends for Leitung
                     for shift in shifts:
                         var_name = (employee["id"], day, shift["code"])
                         if var_name in variable_names:
@@ -433,28 +467,33 @@ def generate_schedule_highs(
                             row_lower.append(0.0)
                             row_upper.append(0.0)
                 else:
-                    # Block late shifts on weekdays
-                    for shift_code in late_shifts + split_shifts:
-                        var_name = (employee["id"], day, shift_code)
-                        if var_name in variable_names:
-                            var_index = variable_names.index(var_name)
-                            a_matrix_index.append(var_index)
-                            a_matrix_value.append(1.0)
-                            a_matrix_start.append(len(a_matrix_index))
-                            row_lower.append(0.0)
-                            row_upper.append(0.0)
-                    
-                    # Add preference for B or Bü Dienst on weekdays
+                    # Weekday: first, block any shift not in {"B Dienst", "Bü Dienst"}
                     for shift in shifts:
                         if shift["code"] not in ["B Dienst", "Bü Dienst"]:
                             var_name = (employee["id"], day, shift["code"])
                             if var_name in variable_names:
                                 var_index = variable_names.index(var_name)
-                                # Add large penalty for non-preferred shifts
-                                objective_coeffs[var_index] += 500.0
-        
-        else:  # For non-Leitung employees
-            # Block Bü Dienst for non-Leitung employees
+                                a_matrix_index.append(var_index)
+                                a_matrix_value.append(1.0)
+                                a_matrix_start.append(len(a_matrix_index))
+                                row_lower.append(0.0)
+                                row_upper.append(0.0)
+
+                    # Then force that exactly one assignment among {"B Dienst", "Bü Dienst"} is made
+                    allowed_indices = []
+                    for shift_code in ["B Dienst", "Bü Dienst"]:
+                        var_name = (employee["id"], day, shift_code)
+                        if var_name in variable_names:
+                            allowed_indices.append(variable_names.index(var_name))
+                    if allowed_indices:
+                        for var_index in allowed_indices:
+                            a_matrix_index.append(var_index)
+                            a_matrix_value.append(1.0)
+                        a_matrix_start.append(len(a_matrix_index))
+                        row_lower.append(1.0)
+                        row_upper.append(1.0)
+        else:
+            # For non-Leitung employees, block Bü Dienst
             for day in days:
                 var_name = (employee["id"], day, "Bü Dienst")
                 if var_name in variable_names:
@@ -539,6 +578,13 @@ def generate_schedule_highs(
 
     # Set objective
     model.changeObjectiveSense(ObjSense.kMinimize)
+
+    # --- Add tie-break noise to prevent optimizer from ganging ---
+    for idx, var_name in enumerate(variable_names):
+        if isinstance(var_name, tuple) and len(var_name) == 3:
+            # add a very small noise proportional to the index (deterministic)
+            objective_coeffs[idx] += idx * 1e-6
+
     col_indices = np.arange(num_vars, dtype=np.int32)
     model.changeColsCost(num_vars, col_indices, objective_coeffs)
 

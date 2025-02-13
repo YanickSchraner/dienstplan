@@ -43,9 +43,8 @@ Die Software soll folgende Daten verarbeiten können:
 **Mitarbeiterdaten:**
 
 *   Name
-*   Qualifikation (Leitung, HF, PH, Ausbildung)
+*   Qualifikation (Leitung, HF, PH, Ausbildung 1, Ausbildung 2)
 *   Arbeitspensum (in Prozent)
-*   In Ausbildung (ja/nein)
 *   Wunschfrei
 *   Weiterbildungen
 *   Krankheitsausfälle
@@ -83,20 +82,20 @@ Bei der automatischen Dienstplanerstellung sollen folgende Regeln berücksichtig
     *   Lehrlinge mit der Qualifikation "Ausbildung 1" dürfen nur unter der Woche arbeiten und ausschliesslich einen B oder C Dienst machen.
     *   Lehrlinge mit der Qualifikation "Ausbildung 2" dürfen maximal 1 Wochenende pro Monat machen. Zudem dürfen sie auch Spätdienste durchführen. Sie dürfen nur einmal pro Monat an einem Sonntag oder Feiertag arbeiten.
 *   **Wochenenden:** Generell sollten nicht mehr als 2 Wochenenden pro Person geplant werden.
-*   **Leitung:** Die Leitung arbeitet generell nur unter der Woche und muss pro Monat 4 Bürotage (Bü Dienst) geplant haben.
+*   **Leitung:** Die Leitung arbeitet generell nur unter der Woche und muss pro Monat 4 Bürotage (Bü Dienst) geplant haben. Die Leitung macht nur Büro Dienste oder B Dienste unter der Woche.
+*   **Qualifikationen:** Fachpersonen sind HF und Leitung. Nicht Fachpersonen sind PH, Ausbildung 1 und Ausbildung 2.
 *   **Qualifikation pro Schicht:**
     *   **Frühschicht:**
-        *   Minimum 1 Fachperson (HF/Leitung) und 4 nicht Fachpersonen (PH/Ausbildung).
-        *   Maximum 2 Fachpersonen und 6 nicht Fachpersonen.
+        *   Eine Fachperson (HF oder Leitung) und 4 nicht Fachpersonen (PH oder Ausbildung 1 oder Ausbildung 2).
         *   Eine Fachperson im B Dienst.
-        *   Minimum 3 Personen im B Dienst (eine Fachperson und 2 Helfer).
-        *   Total also 5 - 8 Personen im Frühdienst.
+        *   Zwei Helfer im B Dienst.
+        *   Eine Person im C Dienst.
+        *   Total also 5 Personen im Frühdienst.
     *   **Spätschicht:**
-        *   Minimum 1 Fachperson und 2 nicht Fachpersonen.
-        *   Maximum 1 Fachperson und 3 nicht Fachpersonen.
         *   Eine Fachperson im S Dienst.
-        *   Maximum eine Person im VS Dienst.
-        *   Total also 3-4 Mitarbeiter in der Spätschicht.
+        *   Ein Helfer im S Dienst.
+        *   Eine Person (Fachperson oder Helfer) im VS Dienst.
+        *   Total also 3 Mitarbeiter in der Spätschicht.
     *   **Geteilte Schicht:**
         *   Maximal 3 geteilte Dienste (C4 und BS) an einem Tag.
         *   Die Anzahl an geteilten Schichten soll möglichst gering sein.
@@ -105,9 +104,9 @@ Bei der automatischen Dienstplanerstellung sollen folgende Regeln berücksichtig
 *   **Fachpersonen:** HF und Leitung
 *   **Nicht Fachpersonen:** Ausbildung und PH
 *   **Leitung:** Hat bis zu 4 Bürotage im Monat. Arbeitet nicht am Wochenende. Hat sonst B Dienste unter der Woche.
-*   **Aufeinanderfolgende Dienste:** Eine Person darf nicht mehr als 5 aufeinanderfolgende Dienste haben.
+*   **Aufeinanderfolgende Dienste:** Eine Person möglichst viele Aufeinanderfolgende Dienste, aber nie mehr als 5 aufeinanderfolgende Dienste. Das ist ein Soft Constraint. Nach 5 aufeinanderfolgenden Diensten soll eine Pause von mindestens zwei Tagen erfolgen.
 *   **Wechsel von Spät- auf Frühdienst:** Ein Wechsel von Spätdienst auf Frühdienst ist nur in folgenden Kombinationen erlaubt: VS auf C und C4 auf C.
-*   **Ziel Diensttage:** Eine Person hat eine Anzahl an Diensttagen pro Monat (target wordays). Diese soll als Zielwert für die Anzahl Schichten pro Monat dienen. Als Diensttag zählen Schichten, SL und Ferientage. Es ist ok, wenn eine Person weniger als die Ziel Diensttage in einem Monat arbeitet.
+*   **Ziel Diensttage:** Eine Person hat eine Anzahl an Diensttagen pro Monat (target wordays). Diese soll als Zielwert für die Anzahl Schichten pro Monat dienen. Als Diensttag zählen Schichten, SL und Ferientage. Das ist ein Soft Constraint.
 *   **Büro Schicht:** Die Büro Schicht zählt nicht als Früh- oder Spätdienst. Dieser Dienst darf der Anzahl an Personen im Frühdienst oder Spätdienst nicht angerechnet werden.
 
 ## Software

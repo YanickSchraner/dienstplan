@@ -1,0 +1,9 @@
+pyinstaller==6.3.0
+streamlit==1.31.1
+pandas==2.2.0
+holidays==0.43
+openpyxl==3.1.2
+toolz==0.12.1
+altair==5.2.0
+numpy==1.26.4
+pyarrow==15.0.0 

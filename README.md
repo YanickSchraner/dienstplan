@@ -80,26 +80,32 @@ Bei der automatischen Dienstplanerstellung sollen folgende Regeln berücksichtig
 *   **Vordefinierte Dienste:** Schule (SL), unbezahlte Schule (uw), Wunschfrei (.w), Ferien (Fe) und Krankheiten (Kr) sind vor dem Planen bereits bekannt und müssen berücksichtigt werden.
 *   **Lehrlinge:**
     *   Lehrlinge mit der Qualifikation "Ausbildung 1" dürfen nur unter der Woche arbeiten und ausschliesslich einen B oder C Dienst machen.
-    *   Lehrlinge mit der Qualifikation "Ausbildung 2" dürfen maximal 1 Wochenende pro Monat machen. Zudem dürfen sie auch Spätdienste durchführen. Sie dürfen nur einmal pro Monat an einem Sonntag oder Feiertag arbeiten.
-*   **Wochenenden:** Generell sollten nicht mehr als 2 Wochenenden pro Person geplant werden.
+    *   Lehrlinge mit der Qualifikation "Ausbildung 2" dürfen nur unter der Woche arbeiten und ausschliesslich einen B oder C Dienst machen.
+*   **Wochenenden:** Generell sollten nicht mehr als 2 Wochenenden pro Person geplant werden. Das ist ein Soft Constraint.
 *   **Leitung:** Die Leitung arbeitet generell nur unter der Woche und muss pro Monat 4 Bürotage (Bü Dienst) geplant haben. Die Leitung macht nur Büro Dienste oder B Dienste unter der Woche.
 *   **Qualifikationen:** Fachpersonen sind HF und Leitung. Nicht Fachpersonen sind PH, Ausbildung 1 und Ausbildung 2.
 *   **Qualifikation pro Schicht:**
+    * Group-Level Coverage
+        *    Early group (B, C, BS, C4) must cover at least 5 employees. At least one of the employees must be a HF or Leitung.
+        *    Late group (S, VS, BS, C4) must cover at least 3. At least one of the employees must be a HF.
+        *    Additional individual minimums (≥2 for B) are enforced.
     *   **Frühschicht:**
-        *   Eine Fachperson (HF oder Leitung) und 4 nicht Fachpersonen (PH oder Ausbildung 1 oder Ausbildung 2).
+        *   Mindestens eine Fachperson (HF oder Leitung) in der Frühschicht. Total 5 Personen in der Frühschicht, es soll somit mit nicht Fachpersonen (PH oder Ausbildung 1 oder Ausbildung 2) aufgefüllt werden.
         *   Eine Fachperson im B Dienst.
-        *   Zwei Helfer im B Dienst.
-        *   Eine Person im C Dienst.
-        *   Total also 5 Personen im Frühdienst.
+        *   Wenn möglich, zwei Helfer im B Dienst.
+        *   Wenn möglich, eine Person im C Dienst.
+        *   Total mindestens 4 Personen im Frühdienst.
     *   **Spätschicht:**
         *   Eine Fachperson im S Dienst.
-        *   Ein Helfer im S Dienst.
-        *   Eine Person (Fachperson oder Helfer) im VS Dienst.
-        *   Total also 3 Mitarbeiter in der Spätschicht.
+        *   Wenn möglich, ein Helfer im S Dienst.
+        *   Wenn möglich, eine Person im VS Dienst.
+        *   Total mindestens 2 Mitarbeiter in der Spätschicht, eine muss eine Fachperson sein.
     *   **Geteilte Schicht:**
         *   Maximal 3 geteilte Dienste (C4 und BS) an einem Tag.
         *   Die Anzahl an geteilten Schichten soll möglichst gering sein.
         *   Eine Person in einer geteilten Schicht zählt sowohl als geplant in der Frühschicht als auch in der Spätschicht.
+        *   Nur PH und HF dürfen in geteilten Schichten arbeiten.
+        *   Geteilte Schichten dienen dazu, bei Personalmangel die Anzahl an erforderlichen Personen in der Frühschicht und Spätschicht zu reduzieren.
 *   **Frei haben:** Mitarbeiter dürfen frei haben. Dies wird mit "x" eingetragen.
 *   **Fachpersonen:** HF und Leitung
 *   **Nicht Fachpersonen:** Ausbildung und PH

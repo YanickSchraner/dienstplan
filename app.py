@@ -217,19 +217,25 @@ def main():
         pivot_schedule = pivot_schedule.set_index(['qualification', 'employee_name', 'pensum'])
         
         # Calculate daily totals
+        daily_totals = pd.DataFrame(index=pd.Index(['Soll/Ist'], name='Totals'))
+        
+        # Calculate Early/Late/Split totals
         early_shifts = ["B Dienst", "C Dienst"]
         late_shifts = ["VS Dienst", "S Dienst"]
         split_shifts = ["BS Dienst", "C4 Dienst"]
         
-        daily_totals = pd.DataFrame(index=pd.Index(['Early/Late/Split'], name='Totals'))
         for col in pivot_schedule.columns:
-            shifts = pivot_schedule[col].dropna()
-            # Count regular shifts
-            early_count = sum(1 for s in shifts if s in early_shifts)
-            late_count = sum(1 for s in shifts if s in late_shifts)
-            split_count = sum(1 for s in shifts if s in split_shifts)
-            
-            daily_totals[col] = f"{early_count}/{late_count}/{split_count}"
+            if col in ['Soll', 'Ist']:
+                # For Soll and Ist columns, calculate the sum
+                total = pivot_schedule[col].sum()
+                daily_totals[col] = f"{total}"
+            else:
+                # For date columns, calculate shift type counts
+                shifts = pivot_schedule[col].dropna()
+                early_count = sum(1 for s in shifts if s in early_shifts)
+                late_count = sum(1 for s in shifts if s in late_shifts)
+                split_count = sum(1 for s in shifts if s in split_shifts)
+                daily_totals[col] = f"{early_count}/{late_count}/{split_count}"
         
         # Display the schedule with totals
         st.dataframe(pivot_schedule)

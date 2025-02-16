@@ -8,6 +8,7 @@ dependencies = [
     "highspy>=1.9.0",
     "holidays>=0.66",
     "openpyxl>=3.1.5",
+    "ortools>=9.11.4210",
     "pandas>=2.2.3",
     "python-constraint2>=2.0.0",
     "streamlit>=1.42.0",
